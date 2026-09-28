@@ -351,7 +351,7 @@ class OuraBatchSummary {
   final int received;
 
   /// How many bytes of history the ring still holds. Zero means the drain is
-  /// complete — it is the the ONLY completion signal on this path.
+  /// complete — it is the ONLY completion signal on this path.
   final int bytesLeft;
 
   const OuraBatchSummary(this.received, this.bytesLeft);
@@ -394,7 +394,7 @@ OuraBatchSummary? parseBatchSummary(OuraFrame f) {
 /// factory reset, which makes the reset a PRECONDITION of pairing rather than
 /// a consequence of it: a ring that is currently onboarded elsewhere has to be
 /// reset before this can succeed, and resetting is what frees it. There is no
-// state in which both work, and there is no way to read the installed key
+/// state in which both work, and there is no way to read the installed key
 /// back — losing ours costs another reset and nothing more.
 ///
 /// NOT DESTRUCTIVE, and worth saying because it sits next to a family of
@@ -511,6 +511,6 @@ const int kOuraAuthNotOnboarded = 0x03;
 
 /// True when [f] is the ring refusing a command because the session has not
 /// authenticated. Distinguishing this from silence is what stops a drain loop
-// spinning against a ring that is simply waiting to be let in.
+/// spinning against a ring that is simply waiting to be let in.
 bool ouraIsAuthRequired(OuraFrame f) =>
     f.tag == 0x2f && f.payload.isNotEmpty && f.payload[0] == 0x2f;
