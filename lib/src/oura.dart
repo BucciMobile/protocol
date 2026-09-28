@@ -18,14 +18,17 @@
 //   * PROVEN by layout plus an independent physiological sanity check: the
 //     temperature decoders. centi-degrees Celsius, and a worn ring reads
 //     33-35 C.
-//   * NOT DECODED AT ALL, on purpose: beat-to-beat intervals, SpO2, the
-//     hypnogram, steps, raw PPG. Their layouts are bit-packed and this project
-//     has not one byte of any of them. A guessed bit order produces a resting
+//   * NOT DECODED AT ALL, on purpose: beat-to-beat intervals, SpO2, steps,
+//     raw PPG. Their layouts are bit-packed and this project has not one byte
+//     of any of them. A guessed bit order produces a resting
 //     50 bpm read as 100 that passes every plausibility bound it is shown, so
 //     those frames are ARCHIVED VERBATIM instead (owner rulings R1-R3: capture
 //     everything, decode when someone has the hardware). `raw_archive` is never
 //     pruned and `LocalDb.redrivableArchiveReasons` is how they get re-decoded
 //     in place later. See the report accompanying this change for the layouts.
+//     The hypnogram is the one deliberate exception, decoded below: its layout
+//     is documented from real captures by the open_oura project, which is the
+//     only independent oracle this layout has.
 //
 // TIME IS THE HARD PART, and it is not solved here. An event's envelope carries
 // a u32 of DECISECONDS on a clock whose epoch is not Unix and is not documented
