@@ -283,7 +283,7 @@ void main() {
     OuraEvent hypnogram(int tag, String bodyHex, {int ds = 9391523}) =>
         parseOuraEvent(
             parseOuraFrame(_hex(tag.toRadixString(16).padLeft(2, '0')) +
-                _hex('${(bodyHex.length / 2 + 4).toRadixString(16).padLeft(2, '0')}') +
+                _hex('${(bodyHex.length ~/ 2 + 4).toRadixString(16).padLeft(2, '0')}') +
                 _hex('a34d8f00') +
                 _hex(bodyHex))!)!;
 
@@ -332,8 +332,8 @@ void main() {
       expect(out.header, 0x03);
       expect(out.phases.length, 16);
       expect(out.phases[3], OuraSleepPhase.light);
-      expect(out.phases[6], OuraSleepPhase.rem);
-      expect(out.phases[10], OuraSleepPhase.awake);
+      expect(out.phases[7], OuraSleepPhase.rem);
+      expect(out.phases[11], OuraSleepPhase.awake);
     });
 
     test('a body too short for header and one code is null', () {
