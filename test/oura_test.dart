@@ -56,7 +56,7 @@ const List<(String label, int ds, String bodyHex)> _kDebugData = [
   ('sleep stats', 9391251, '0927e61e00922500005434000005'),
   // The trap: binary, but every byte is printable-or-NUL.
   ('afe stats, all-printable', 9410164, '2800000000000000000000000000'),
-  ('subtype 0x29, all-printable', 1009832, '2900000000000000'),
+  ('subtype 0x29, all-printable', 10098932, '2900000000000000'),
 ];
 
 void main() {
