@@ -18,14 +18,17 @@
 //   * PROVEN by layout plus an independent physiological sanity check: the
 //     temperature decoders. centi-degrees Celsius, and a worn ring reads
 //     33-35 C.
-//   * NOT DECODED AT ALL, on purpose: beat-to-beat intervals, SpO2, the
-//     hypnogram, steps, raw PPG. Their layouts are bit-packed and this project
-//     has not one byte of any of them. A guessed bit order produces a resting
+//   * NOT DECODED AT ALL, on purpose: beat-to-beat intervals, SpO2, steps,
+//     raw PPG. Their layouts are bit-packed and this project has not one byte
+//     of any of them. A guessed bit order produces a resting
 //     50 bpm read as 100 that passes every plausibility bound it is shown, so
 //     those frames are ARCHIVED VERBATIM instead (owner rulings R1-R3: capture
 //     everything, decode when someone has the hardware). `raw_archive` is never
 //     pruned and `LocalDb.redrivableArchiveReasons` is how they get re-decoded
 //     in place later. See the report accompanying this change for the layouts.
+//     The hypnogram is the one deliberate exception, decoded below: its layout
+//     is documented from real captures by the open_oura project, which is the
+//     only independent oracle this layout has.
 //
 // TIME IS THE HARD PART, and it is not solved here. An event's envelope carries
 // a u32 of DECISECONDS on a clock whose epoch is not Unix and is not documented
@@ -87,7 +90,7 @@ OuraEvent? parseOuraEvent(OuraFrame f) {
   return OuraEvent(f.tag, ts, Uint8List.sublistView(f.payload, 4));
 }
 
-// ── event tags this file has something to say about ────────────────────────
+// ── event tags this file has something to say about ──────────────────────────
 /// Wall-clock the ring recorded when the host last set its RTC. The ONLY event
 /// that pairs a Unix second with an envelope decisecond, which makes it the one
 /// honest anchor between the two clocks.
@@ -98,6 +101,12 @@ const int kOuraEvtTemp = 0x46;
 
 /// A single skin-temperature reading.
 const int kOuraEvtTempPeriod = 0x69;
+
+/// The sleep-stage hypnogram, in three generations of carrier: `information`
+/// (0x4b), `details` (0x4e) and `data` (0x5a, numbered 14-byte pages).
+const int kOuraEvtSleepPhaseInformation = 0x4b;
+const int kOuraEvtSleepPhaseDetails = 0x4e;
+const int kOuraEvtSleepPhaseData = 0x5a;
 
 /// Firmware diagnostics. Subtype-multiplexed; see [decodeDebugData].
 const int kOuraEvtDebugData = 0x61;
@@ -148,6 +157,96 @@ List<double>? decodeTemperatures(OuraEvent e) {
     out.add(c);
   }
   return out;
+}
+
+/// One sleep stage, as the ring's own on-device hypnogram names it.
+///
+/// The ring computes its sleep staging ON THE RING — this is not a number this
+/// package derives, it is a vendor classification handed over the wire, and
+/// the enum is the native `SleepPhase_OSSAv1` one.
+enum OuraSleepPhase {
+  deep,
+  light,
+  rem,
+  awake,
+}
+
+/// The hypnogram one history event carries: a carrier-specific header byte,
+/// then the stage codes in body order.
+///
+/// `header` is the event's own first body byte, passed through UNTOUCHED —
+/// its meaning is the carrier's, not this package's: on the paged
+/// `sleep_phase_data` (`0x5a`) form it counts pages, and what it means on the
+/// `information` (`0x4b`) and `details` (`0x4e`) forms is not a number this
+/// package has evidence for. Interpreting it anyway is how a page count
+/// becomes an epoch offset and every stage lands in the wrong 30-second slot.
+///
+/// `phases` is one entry per 2-bit code, MSB-first, four to a byte, 30 s
+/// epochs in body order on every carrier observed. Every 2-bit value names a
+/// stage today, so no entry is null on the carriers observed so far; the
+/// element type stays nullable because a future firmware may widen the code
+/// space, and an unnamed stage must stay null rather than be coerced to its
+/// nearest neighbour.
+class OuraSleepPhases {
+  /// The carrier's header byte, meaning carrier-specific and NOT interpreted.
+  final int header;
+
+  /// The stage codes in body order. 30 s epochs on every carrier observed.
+  final List<OuraSleepPhase?> phases;
+
+  const OuraSleepPhases(this.header, this.phases);
+}
+
+/// The sleep-stage hypnogram carried by [e], or null when [e] is not one of
+/// the three hypnogram carriers or its body is too short to hold even the
+/// header and one code.
+///
+/// THE LAYOUT, as documented from real captures by the open_oura project
+/// (whose Rust decoder this ports, code for code): a header byte, then 2-bit
+/// phase codes packed four to a byte, MSB-first. On a Gen 3 Horizon (fw
+/// 3.4.3) the `sleep_phase_data` (`0x5a`) form arrives as numbered 14-byte
+/// pages — the header counts pages, each page holding 52 epochs of 30 s —
+/// while the `information` (`0x4b`) and `details` (`0x4e`) forms carry the
+/// same 2-bit codes without the paging. The decoder is generation-agnostic on
+/// purpose: the codes are the same across carriers, and the header is the
+/// carrier's business.
+///
+/// NO EPOCH TIMING IS INVENTED. The codes are 30 s epochs in capture order,
+/// but which absolute second the first epoch covers is a property of the
+/// event's envelope timestamp plus the carrier's header — and this function
+/// hands back neither an offset nor a guess at one. A caller that wants
+/// seconds must derive them from the event's own `tsDs` and say what it
+/// assumed; returning `(header, phases)` and nothing else is what stops a
+/// plausible-but-wrong offset from silently becoming every downstream
+/// metric's x-axis.
+///
+/// HARDWARE PROVENANCE, stated because this package's ground rules demand
+/// it: the 2-bit code layout is confirmed against real `sleep_phase_data`
+/// bytes captured from a Gen 3 Horizon. It has NOT been seen from a Ring 4
+/// or Ring 5 yet — those may emit the same codes under another carrier or
+/// no hypnogram at all, and the ring's own scores (0-100) are NOT on this
+/// path in any case: they are computed on the phone, not the ring.
+OuraSleepPhases? decodeSleepPhases(OuraEvent e) {
+  if (e.tag != kOuraEvtSleepPhaseInformation &&
+      e.tag != kOuraEvtSleepPhaseDetails &&
+      e.tag != kOuraEvtSleepPhaseData) {
+    return null;
+  }
+  if (e.body.length < 2) return null;
+  const codes = <int, OuraSleepPhase>{
+    0: OuraSleepPhase.deep,
+    1: OuraSleepPhase.light,
+    2: OuraSleepPhase.rem,
+    3: OuraSleepPhase.awake,
+  };
+  final phases = <OuraSleepPhase?>[];
+  for (var i = 1; i < e.body.length; i++) {
+    final b = e.body[i];
+    for (final shift in <int>[6, 4, 2, 0]) {
+      phases.add(codes[(b >> shift) & 0x03]);
+    }
+  }
+  return OuraSleepPhases(e.body[0], phases);
 }
 
 /// One `debug_data` (`0x61`) sub-record.
@@ -268,7 +367,7 @@ OuraBatchSummary? parseBatchSummary(OuraFrame f) {
   return OuraBatchSummary(f.payload[0], d.getUint32(2, Endian.little));
 }
 
-// ── outbound frames ────────────────────────────────────────────────────────
+// ── outbound frames ──────────────────────────────────────────────────────────
 // Every builder returns the complete frame including its two header bytes, so
 // a caller can only ever hand `link.write` something well-formed.
 //
