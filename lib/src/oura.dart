@@ -366,9 +366,10 @@ List<int> ouraCmdSetNotifyFlags(int flags) => <int>[0x1c, 0x01, flags & 0xff];
 /// Set the ring's real-time clock: u64 LE Unix seconds, then a timezone in
 /// half-hour steps.
 ///
-/// This is what later produces a [kOuraEvtTimeSync] event, and that event is the
-/// only measured bridge between the ring's decisecond counter and a date — so
-/// this write is not housekeeping, it is what makes the timestamps meaningful.
+/// This is what later produces a [kOuraEvtTimeSync] event, one of the two
+/// measured bridges (with [kOuraEvtRtcBeacon]) between the ring's decisecond
+/// counter and a date — so this write is not housekeeping, it is what makes the
+/// timestamps meaningful.
 List<int> ouraCmdSyncTime(int unixSeconds, {int tzHalfHours = 0}) {
   final b = Uint8List(9);
   final d = b.buffer.asByteData();
