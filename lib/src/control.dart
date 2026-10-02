@@ -1514,11 +1514,15 @@ Decoded _decodeDataRecord(Uint8List inner,
   if (inner.length < 64) {
     if (recType == 2) {
       final v2 = parseRealtimeHrV2(inner);
-      if (v2 != null) {
+      // rev 2 is every real 0x28 packet, and it keeps the compact layout's
+      // rr_count@9 + slots @10..16, so read the beats from there. hr 0 is a
+      // legit off-wrist reading; anything over 250 is not a bpm.
+      if (v2 != null && v2.hrBpm <= 250) {
         return Decoded('realtime_hr', {
           'rec_type': recType,
           'ts_epoch': v2.tsEpoch,
           'hr': v2.hrBpm,
+          'rr_ms': parseRealtimeHr(inner)?.rrMs ?? const <int>[],
           'wearing': !v2.isOffBody,
           'location': v2.locationRaw,
         });
