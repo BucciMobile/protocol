@@ -418,8 +418,7 @@ class Gen5HelloInfo {
   /// shorter than the [semanticBodyLen] the fixed-offset parser needs — a short
   /// body is a failed/foreign reply, never a partially-filled hello. The
   /// revision byte is recorded in [helloRevision] but is not a gate: the
-  /// official parser reads the fixed revision-1 offsets regardless of its
-  /// value.
+  /// fixed revision-1 offsets are read regardless of its value.
   ///
   /// Callers should additionally gate on the command-response STATUS byte; a
   /// non-success reply leaves the body unpopulated (see [parseCommandResponse]).
