@@ -16,11 +16,8 @@
 // on this project owns a ring. The decoders that are NOT here (beat intervals,
 // SpO2, steps, raw PPG) are absent precisely because there are no bytes to
 // build such a fixture from, and shipping a guess would have this file
-// faithfully encoding the wrong answer. The hypnogram tests below are the one
-// departure from that rule, and a deliberate one: their vectors are pinned by
-// the open_oura project's own decoder tests against real `sleep_phase_data`
-// captures from a Gen 3 Horizon, which is the only independent oracle that
-// exists for this layout.
+// faithfully encoding the wrong answer. The hypnogram vectors below are
+// synthetic: they pin bit order and refusal, not real-ring correctness.
 //
 // The NULL cases at the bottom are the load-bearing half: they are what proves
 // the decoder REFUSES rather than always producing something.
@@ -280,20 +277,15 @@ void main() {
   });
 
   group('sleep phases', () {
-    OuraEvent hypnogram(int tag, String bodyHex, {int ds = 9391523}) =>
-        parseOuraEvent(
-            parseOuraFrame(_hex(tag.toRadixString(16).padLeft(2, '0')) +
-                _hex('${(bodyHex.length ~/ 2 + 4).toRadixString(16).padLeft(2, '0')}') +
-                _hex('a34d8f00') +
-                _hex(bodyHex))!)!;
+    OuraEvent hypnogram(int tag, String bodyHex) {
+      final body = _hex(bodyHex);
+      return parseOuraEvent(parseOuraFrame(
+          [tag, body.length + 4, ..._hex('a34d8f00'), ...body])!)!;
+    }
 
     test('two-bit codes unpack MSB-first, four to a byte', () {
-      // The one vector open_oura's own Rust tests pin: body byte 0b00_01_10_11
-      // is deep, light, rem, awake in that order. A decoder that unpacked
-      // LSB-first would hand back the reverse, and every 30-second epoch of
-      // the night would carry its neighbour's stage.
-      final e = hypnogram(0x4b, '00' + '1b');
-      final out = decodeSleepPhases(e)!;
+      // 0b00_01_10_11: LSB-first would hand back the reverse.
+      final out = decodeSleepPhases(hypnogram(0x4b, '001b'))!;
       expect(out.header, 0x00);
       expect(out.phases, [
         OuraSleepPhase.deep,
@@ -303,14 +295,9 @@ void main() {
       ]);
     });
 
-    test('every observed carrier tag carries the same codes', () {
-      // 0x4b, 0x4e and 0x5a are three generations of the same hypnogram. The
-      // decoder must be generation-agnostic about the codes: if a Ring 4
-      // emits them under a different carrier than a Gen 3 did, refusing it
-      // would silently drop the whole night's staging.
-      // 0xe4 = 0b11_10_01_00 is awake, rem, light, deep on every carrier.
+    test('all three carrier tags decode the same codes', () {
       for (final tag in <int>[0x4b, 0x4e, 0x5a]) {
-        final out = decodeSleepPhases(hypnogram(tag, '01' + 'e4'))!;
+        final out = decodeSleepPhases(hypnogram(tag, '01e4'))!;
         expect(out.phases, [
           OuraSleepPhase.awake,
           OuraSleepPhase.rem,
@@ -320,15 +307,8 @@ void main() {
       }
     });
 
-    test('the paged carrier header is passed through, not interpreted', () {
-      // On the paged 0x5a form the header counts pages — 52 epochs of 30 s
-      // each. Turning it into an epoch offset here is how every stage lands
-      // in the wrong 30-second slot; the caller derives timing from tsDs.
-      // Body bytes 01, 02, 03, 00 unpack to deep/deep/deep/light,
-      // deep/deep/deep/rem, deep/deep/deep/awake, then four deeps —
-      // one entry per 2-bit code, MSB-first, 30 s epochs in body order.
-      final e = hypnogram(0x5a, '0301020300');
-      final out = decodeSleepPhases(e)!;
+    test('the header is passed through, every following byte is codes', () {
+      final out = decodeSleepPhases(hypnogram(0x5a, '0301020300'))!;
       expect(out.header, 0x03);
       expect(out.phases.length, 16);
       expect(out.phases[3], OuraSleepPhase.light);
@@ -336,19 +316,15 @@ void main() {
       expect(out.phases[11], OuraSleepPhase.awake);
     });
 
-    test('a body too short for header and one code is null', () {
-      // Header only: no codes at all, and a decoder that returned an empty
-      // hypnogram would be asserting a shape the wire never sent.
+    test('a header-only body is null', () {
       expect(decodeSleepPhases(hypnogram(0x4b, '00')), isNull);
     });
 
-    test('a non-hypnogram tag is null, whatever its body looks like', () {
-      // The NULL cases are the load-bearing half: this is what proves the
-      // decoder REFUSES rather than always producing something.
-      final e = hypnogram(0x61, '001b');
-      expect(decodeSleepPhases(e), isNull);
+    test('a non-hypnogram tag is null', () {
+      expect(decodeSleepPhases(hypnogram(0x61, '001b')), isNull);
     });
   });
+
   group('authentication (non-cryptographic half)', () {
     test('the challenge is 15 bytes out of a 16-byte reply body', () {
       final f = parseOuraFrame(
