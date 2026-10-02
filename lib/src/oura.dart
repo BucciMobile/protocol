@@ -88,9 +88,9 @@ OuraEvent? parseOuraEvent(OuraFrame f) {
 }
 
 // ── event tags this file has something to say about ────────────────────────
-/// Wall-clock the ring recorded when the host last set its RTC. The ONLY event
-/// that pairs a Unix second with an envelope decisecond, which makes it the one
-/// honest anchor between the two clocks.
+/// Wall-clock the ring recorded when the host last set its RTC. It pairs a Unix
+/// second with an envelope decisecond, so it anchors one clock to the other
+/// (as does [kOuraEvtRtcBeacon]).
 const int kOuraEvtTimeSync = 0x42;
 
 /// An array of skin-temperature probes.
@@ -138,6 +138,10 @@ int? decodeTimeSync(OuraEvent e) {
 /// at offset 8 whose meaning is unknown. Bodies under 10 bytes are refused.
 /// Same date window as [decodeTimeSync], so an unset RTC never becomes an
 /// anchor.
+///
+/// Like [decodeTimeSync], this layout has no real captured [kOuraEvtRtcBeacon]
+/// frame in this repo behind it, so check a real one against it before
+/// trusting it for anything beyond the date window.
 int? decodeRtcBeacon(OuraEvent e) {
   if (e.tag != kOuraEvtRtcBeacon || e.body.length < 10) return null;
   final v = e.body.buffer

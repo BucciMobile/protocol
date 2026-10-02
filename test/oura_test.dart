@@ -247,9 +247,10 @@ void main() {
       final ok = parseOuraEvent(parseOuraFrame(
               _hex('850e') + _hex('01000000') + _hex('4fd2376a00000000e803'))!)!;
       expect(decodeRtcBeacon(ok), 1782043215);
-      // A body too short for the full layout is not a beacon.
+      // A 9-byte body, one short of the full layout, is not a beacon.
       final short = parseOuraEvent(parseOuraFrame(
-              _hex('8509') + _hex('01000000') + _hex('4fd2376a00000000'))!)!;
+              _hex('850d') + _hex('01000000') + _hex('4fd2376a00000000e8'))!)!;
+      expect(short.body.length, 9);
       expect(decodeRtcBeacon(short), isNull);
       // A different tag is not a beacon either.
       final other = parseOuraEvent(parseOuraFrame(
