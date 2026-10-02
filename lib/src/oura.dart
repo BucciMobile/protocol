@@ -131,36 +131,19 @@ int? decodeTimeSync(OuraEvent e) {
   return (v >= 1700000000 && v <= 4100000000) ? v : null;
 }
 
-/// One `rtc_beacon` (`0x85`) body: a Unix second plus a trailer.
-class OuraRtcBeacon {
-  /// Unix seconds, 1-second granular.
-  final int unixSeconds;
-
-  /// The frame's trailer, two bytes at body offset 8.
-  final int trailer;
-
-  const OuraRtcBeacon(this.unixSeconds, this.trailer);
-}
-
-/// Decode one `rtc_beacon` (`0x85`) body, or null when [e] is not one.
+/// Unix seconds from an `rtc_beacon` (`0x85`) body, or null when [e] is not
+/// one or the value is not a date.
 ///
-/// The layout is ported code for code from open_oura's
-/// `decode_rtc_beacon` (crates/oura-protocol/src/events.rs:356), the only
-/// independent oracle this layout has: `u32` LE Unix seconds at offset 0,
-/// reserved bytes in between, and a `u16` LE trailer at offset 8. Bodies
-/// shorter than the 10 bytes the trailer needs are refused rather than read
-/// half-way.
-///
-/// UNLIKE [decodeTimeSync] this is the ring speaking unprompted, and the value
-/// needs no plausibility window of its own to be useful: it is a beacon a
-/// caller pairs with the envelope decisecond it arrived on, and a caller that
-/// wants a date does its own refusing. It is also 1-second granular, where the
-/// time-sync event only proves the RTC was set to the second it carries.
-OuraRtcBeacon? decodeRtcBeacon(OuraEvent e) {
+/// Layout: `u32` LE Unix seconds at offset 0, then reserved bytes and a `u16`
+/// at offset 8 whose meaning is unknown. Bodies under 10 bytes are refused.
+/// Same date window as [decodeTimeSync], so an unset RTC never becomes an
+/// anchor.
+int? decodeRtcBeacon(OuraEvent e) {
   if (e.tag != kOuraEvtRtcBeacon || e.body.length < 10) return null;
-  final d = e.body.buffer.asByteData(e.body.offsetInBytes);
-  return OuraRtcBeacon(
-      d.getUint32(0, Endian.little), d.getUint16(8, Endian.little));
+  final v = e.body.buffer
+      .asByteData(e.body.offsetInBytes)
+      .getUint32(0, Endian.little);
+  return (v >= 1700000000 && v <= 4100000000) ? v : null;
 }
 
 /// Skin temperature in degrees Celsius, one entry per probe.
