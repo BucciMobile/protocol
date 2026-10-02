@@ -383,8 +383,8 @@ class Gen5HelloInfo {
   /// `48 <= value < 86`.
   bool get isWhoop5 => opticalDiscriminator >= 48 && opticalDiscriminator < 86;
 
-  /// WHOOP MG — app generation `MAVERICK` in the official revision-1 HELLO
-  /// parser: optical discriminator in `[0, 38)`. The physical MG reports 0.
+  /// WHOOP MG (generation `MAVERICK`) in a revision-1 HELLO: optical
+  /// discriminator in `[0, 38)`. The MG reports 0.
   ///
   /// Gated on [helloRevision] == 1, unlike [isWhoop5]: MG is the gate for the
   /// Labrador/ECG lifecycle, and a HELLO of an unknown revision must never be
@@ -497,11 +497,12 @@ HelloInfo parseHello(Uint8List payload) {
   // a percentage is 0..100 by definition, so 1000 is the ceiling. Out of
   // range = not the battery field, keep scanning / leave batteryPct null.
   //
-  // The scan starts at payload[2] — the first byte of the response BODY.
-  // payload[0] is the echoed request seq and payload[1] the status, and a
-  // status of 1 next to a small body byte reads as a perfectly plausible
-  // 0.1–76.9%, so starting at 1 reported the status byte as a battery level.
-  for (int off = 2; off < 10; off++) {
+  // The scan starts at payload[3]. payload[0] is the echoed request seq,
+  // payload[1] the status, and payload[2] a fixed body byte (0x04) that sits
+  // right before the battery u32 at [3]. Starting at 2 read 0x04 | lo << 8,
+  // which for a battery low byte of 1..3 lands in range (26.0/51.6/77.2%) and
+  // stopped the scan before the real field.
+  for (int off = 3; off < 10; off++) {
     if (off + 2 <= payload.length) {
       final v = u16(payload, off);
       if (v >= 10 && v <= 1000) {
