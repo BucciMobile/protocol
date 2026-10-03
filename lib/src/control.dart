@@ -246,6 +246,13 @@ RealtimeHr? parseRealtimeHr(Uint8List inner) {
   final ts = u32(inner, 2);
   final hr = inner[8];
   if (hr < 1 || hr > 250) return null;
+  final wearing = inner.length > 18 ? inner[18] == 1 : true;
+  return RealtimeHr(hr, hr.toDouble(), _realtimeRrSlots(inner), wearing, ts);
+}
+
+// The compact 0x28 R-R slots, read independently of the HR byte so an hr-0
+// (off-wrist) packet keeps its declared beats like live.dart's realtimeRr.
+List<int> _realtimeRrSlots(Uint8List inner) {
   final rr = <int>[];
   // a 9-byte packet has ts+hr but nothing past it - inner[9] (rr_count) would
   // be one byte out of bounds. no rr_count byte just means no RR intervals,
@@ -269,8 +276,7 @@ RealtimeHr? parseRealtimeHr(Uint8List inner) {
       if (v >= kMinRrMs && v <= kMaxRrMs) rr.add(v);
     }
   }
-  final wearing = inner.length > 18 ? inner[18] == 1 : true;
-  return RealtimeHr(hr, hr.toDouble(), rr, wearing, ts);
+  return rr;
 }
 
 RealtimeHrV2? parseRealtimeHrV2(Uint8List body) {
@@ -1522,11 +1528,15 @@ Decoded _decodeDataRecord(Uint8List inner,
   if (inner.length < 64 && !historical) {
     if (recType == 2) {
       final v2 = parseRealtimeHrV2(inner);
-      if (v2 != null) {
+      // rev 2 is every real 0x28 packet, and it keeps the compact layout's
+      // rr_count@9 + slots @10..16, so read the beats from there. hr 0 is a
+      // legit off-wrist reading; anything over 250 is not a bpm.
+      if (v2 != null && v2.hrBpm <= 250) {
         return Decoded('realtime_hr', {
           'rec_type': recType,
           'ts_epoch': v2.tsEpoch,
           'hr': v2.hrBpm,
+          'rr_ms': _realtimeRrSlots(inner),
           'wearing': !v2.isOffBody,
           'location': v2.locationRaw,
         });

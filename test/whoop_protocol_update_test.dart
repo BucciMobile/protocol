@@ -616,6 +616,40 @@ void main() {
       expect(decoded.fields['wearing'], isTrue);
     });
 
+    // real 0x28 packets all carry rev byte 2 and took the v2 path, which
+    // dropped the beats and let any hr byte through
+    test('rev-2 packet keeps rr_ms and gates hr', () {
+      Uint8List pkt(int hr) {
+        final b = Uint8List(20);
+        final bd = b.buffer.asByteData();
+        b[0] = 0x28;
+        b[1] = 2;
+        bd.setUint32(2, 1780840486, Endian.little);
+        b[8] = hr;
+        b[9] = 1;
+        bd.setInt16(10, 850, Endian.little);
+        b[18] = 1;
+        b[19] = 2;
+        return b;
+      }
+
+      final ok = decodeFrame(Frame(pkt(70), true, true));
+      expect(ok.kind, 'realtime_hr');
+      expect(ok.fields['hr'], 70);
+      expect(ok.fields['rr_ms'], [850]);
+      expect(ok.fields['wearing'], isTrue);
+
+      // 250 is the top of the rev-2 path, not the fallback (which drops location)
+      final max = decodeFrame(Frame(pkt(250), true, true));
+      expect(max.kind, 'realtime_hr');
+      expect(max.fields['hr'], 250);
+      expect(max.fields['location'], 2);
+
+      expect(decodeFrame(Frame(pkt(255), true, true)).kind, 'realtime_small');
+      // hr 0 is off-wrist but the declared beats still come through
+      expect(decodeFrame(Frame(pkt(0), true, true)).fields['rr_ms'], [850]);
+    });
+
     // copilot review also caught a real one: a 9-byte packet (ts+hr, no
     // rr_count byte at all) would read inner[9] out of bounds and throw
     // instead of decoding. fixed to treat a missing rr_count byte as "no RR
