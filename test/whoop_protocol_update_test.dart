@@ -629,6 +629,7 @@ void main() {
         b[9] = 1;
         bd.setInt16(10, 850, Endian.little);
         b[18] = 1;
+        b[19] = 2;
         return b;
       }
 
@@ -637,6 +638,12 @@ void main() {
       expect(ok.fields['hr'], 70);
       expect(ok.fields['rr_ms'], [850]);
       expect(ok.fields['wearing'], isTrue);
+
+      // 250 is the top of the rev-2 path, not the fallback (which drops location)
+      final max = decodeFrame(Frame(pkt(250), true, true));
+      expect(max.kind, 'realtime_hr');
+      expect(max.fields['hr'], 250);
+      expect(max.fields['location'], 2);
 
       expect(decodeFrame(Frame(pkt(255), true, true)).kind, 'realtime_small');
       // hr 0 is off-wrist but the declared beats still come through
