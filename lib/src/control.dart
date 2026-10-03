@@ -245,6 +245,13 @@ RealtimeHr? parseRealtimeHr(Uint8List inner) {
   final ts = u32(inner, 2);
   final hr = inner[8];
   if (hr < 1 || hr > 250) return null;
+  final wearing = inner.length > 18 ? inner[18] == 1 : true;
+  return RealtimeHr(hr, hr.toDouble(), _realtimeRrSlots(inner), wearing, ts);
+}
+
+// The compact 0x28 R-R slots, read independently of the HR byte so an hr-0
+// (off-wrist) packet keeps its declared beats like live.dart's realtimeRr.
+List<int> _realtimeRrSlots(Uint8List inner) {
   final rr = <int>[];
   // a 9-byte packet has ts+hr but nothing past it - inner[9] (rr_count) would
   // be one byte out of bounds. no rr_count byte just means no RR intervals,
@@ -268,8 +275,7 @@ RealtimeHr? parseRealtimeHr(Uint8List inner) {
       if (v >= kMinRrMs && v <= kMaxRrMs) rr.add(v);
     }
   }
-  final wearing = inner.length > 18 ? inner[18] == 1 : true;
-  return RealtimeHr(hr, hr.toDouble(), rr, wearing, ts);
+  return rr;
 }
 
 RealtimeHrV2? parseRealtimeHrV2(Uint8List body) {
@@ -1522,7 +1528,7 @@ Decoded _decodeDataRecord(Uint8List inner,
           'rec_type': recType,
           'ts_epoch': v2.tsEpoch,
           'hr': v2.hrBpm,
-          'rr_ms': parseRealtimeHr(inner)?.rrMs ?? const <int>[],
+          'rr_ms': _realtimeRrSlots(inner),
           'wearing': !v2.isOffBody,
           'location': v2.locationRaw,
         });

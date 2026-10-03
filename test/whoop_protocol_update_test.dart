@@ -639,6 +639,8 @@ void main() {
       expect(ok.fields['wearing'], isTrue);
 
       expect(decodeFrame(Frame(pkt(255), true, true)).kind, 'realtime_small');
+      // hr 0 is off-wrist but the declared beats still come through
+      expect(decodeFrame(Frame(pkt(0), true, true)).fields['rr_ms'], [850]);
     });
 
     // copilot review also caught a real one: a 9-byte packet (ts+hr, no
