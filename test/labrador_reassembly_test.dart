@@ -1,6 +1,5 @@
-// A 1,584-byte framed R16 does not fit one BLE notification. The official
-// history sync only counts it once complete WHOOP-frame reassembly has run
-// (docs/mg/05 §"Required conformance fixtures" item 3). These tests feed one
+// A 1,584-byte framed R16 does not fit one BLE notification, so it only
+// counts once complete WHOOP-frame reassembly has run. These tests feed one
 // synthetic R16 frame — and a small R18 behind it — through the gen5
 // FrameReassembler under adversarial chunkings, including a body that
 // contains 0xAA bytes and a fake `aa 01` header.

@@ -87,8 +87,7 @@ class BandProfile {
   /// (host → strap). Null on gen4, which has no such field at all (4-byte
   /// header).
   ///
-  /// FINDING (byte-verified against 8 real gen5 fixtures, not stated
-  /// correctly by either upstream reference repo — both assumed a single
+  /// FINDING (byte-verified against 8 real gen5 fixtures — NOT a single
   /// universal `[0x00,0x01]`): these bytes are NOT a fixed constant. Every
   /// host→strap COMMAND frame carries `[0x00,0x01]`; every strap→host frame
   /// of every OTHER packet type (METADATA, HISTORICAL_DATA, REALTIME_DATA,

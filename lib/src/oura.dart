@@ -18,14 +18,16 @@
 //   * PROVEN by layout plus an independent physiological sanity check: the
 //     temperature decoders. centi-degrees Celsius, and a worn ring reads
 //     33-35 C.
-//   * NOT DECODED AT ALL, on purpose: beat-to-beat intervals, SpO2, the
-//     hypnogram, steps, raw PPG. Their layouts are bit-packed and this project
-//     has not one byte of any of them. A guessed bit order produces a resting
+//   * NOT DECODED AT ALL, on purpose: beat-to-beat intervals, SpO2, steps,
+//     raw PPG. Their layouts are bit-packed and this project has not one byte
+//     of any of them. A guessed bit order produces a resting
 //     50 bpm read as 100 that passes every plausibility bound it is shown, so
 //     those frames are ARCHIVED VERBATIM instead (owner rulings R1-R3: capture
 //     everything, decode when someone has the hardware). `raw_archive` is never
 //     pruned and `LocalDb.redrivableArchiveReasons` is how they get re-decoded
 //     in place later. See the report accompanying this change for the layouts.
+//   * KNOWN LAYOUT, NOT VERIFIED HERE: the hypnogram. Seen on a Gen 3 only,
+//     never on a Ring 4/5.
 //
 // TIME IS THE HARD PART, and it is not solved here. An event's envelope carries
 // a u32 of DECISECONDS on a clock whose epoch is not Unix and is not documented
@@ -99,6 +101,12 @@ const int kOuraEvtTemp = 0x46;
 /// A single skin-temperature reading.
 const int kOuraEvtTempPeriod = 0x69;
 
+/// Sleep-stage hypnogram carriers: `information`, `details`, and `data`
+/// (numbered 14-byte pages, 52 epochs each). Same codes on all three.
+const int kOuraEvtSleepPhaseInformation = 0x4b;
+const int kOuraEvtSleepPhaseDetails = 0x4e;
+const int kOuraEvtSleepPhaseData = 0x5a;
+
 /// Firmware diagnostics. Subtype-multiplexed; see [decodeDebugData].
 const int kOuraEvtDebugData = 0x61;
 
@@ -148,6 +156,47 @@ List<double>? decodeTemperatures(OuraEvent e) {
     out.add(c);
   }
   return out;
+}
+
+/// One sleep stage as the ring itself staged it. Declaration order is the
+/// 2-bit wire code (0 = deep .. 3 = awake).
+enum OuraSleepPhase {
+  deep,
+  light,
+  rem,
+  awake,
+}
+
+/// One hypnogram event: the carrier's header byte and one stage per 30 s epoch.
+class OuraSleepPhases {
+  /// Passed through uninterpreted. On `0x5a` it is a page counter, not an
+  /// epoch offset; on `0x4b`/`0x4e` its meaning is unknown.
+  final int header;
+
+  /// Stages in body order, one per 30 s epoch.
+  final List<OuraSleepPhase> phases;
+
+  const OuraSleepPhases(this.header, this.phases);
+}
+
+/// The hypnogram carried by [e]: a header byte, then 2-bit stage codes packed
+/// four to a byte, MSB-first. Null when [e] is not a hypnogram carrier or has
+/// no codes. Absolute timing is left to the caller (from [OuraEvent.tsDs]).
+OuraSleepPhases? decodeSleepPhases(OuraEvent e) {
+  if (e.tag != kOuraEvtSleepPhaseInformation &&
+      e.tag != kOuraEvtSleepPhaseDetails &&
+      e.tag != kOuraEvtSleepPhaseData) {
+    return null;
+  }
+  if (e.body.length < 2) return null;
+  final phases = <OuraSleepPhase>[];
+  for (var i = 1; i < e.body.length; i++) {
+    final b = e.body[i];
+    for (final shift in const [6, 4, 2, 0]) {
+      phases.add(OuraSleepPhase.values[(b >> shift) & 0x03]);
+    }
+  }
+  return OuraSleepPhases(e.body[0], phases);
 }
 
 /// One `debug_data` (`0x61`) sub-record.

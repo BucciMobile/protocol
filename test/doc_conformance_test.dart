@@ -111,7 +111,7 @@ void main() {
     expect(r.inner[3], 0, reason: 'alignment padding, not a body byte');
   });
 
-  test('WHOOP MG Labrador lists — exact gen5 bodies and padding (docs/mg/05)',
+  test('WHOOP MG Labrador lists — exact gen5 bodies and padding',
       () {
     List<int> inner(Uint8List f) =>
         parseFrame(f, profile: BandProfile.gen5)!.inner;

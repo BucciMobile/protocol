@@ -10,6 +10,7 @@ import 'band.dart';
 import 'constants.dart';
 import 'framing.dart';
 import 'gen5_records.dart';
+import 'live.dart' show kR10MinLength;
 import 'records.dart';
 
 // ── little-endian helpers over a byte list ──────────────────────────────────
@@ -389,8 +390,8 @@ class Gen5HelloInfo {
   /// `48 <= value < 86`.
   bool get isWhoop5 => opticalDiscriminator >= 48 && opticalDiscriminator < 86;
 
-  /// WHOOP MG — app generation `MAVERICK` in the official revision-1 HELLO
-  /// parser: optical discriminator in `[0, 38)`. The physical MG reports 0.
+  /// WHOOP MG (generation `MAVERICK`) in a revision-1 HELLO: optical
+  /// discriminator in `[0, 38)`. The MG reports 0.
   ///
   /// Gated on [helloRevision] == 1, unlike [isWhoop5]: MG is the gate for the
   /// Labrador/ECG lifecycle, and a HELLO of an unknown revision must never be
@@ -424,8 +425,7 @@ class Gen5HelloInfo {
   /// shorter than the [semanticBodyLen] the fixed-offset parser needs — a short
   /// body is a failed/foreign reply, never a partially-filled hello. The
   /// revision byte is recorded in [helloRevision] but is not a gate: the
-  /// official parser reads the fixed revision-1 offsets regardless of its
-  /// value.
+  /// fixed revision-1 offsets are read regardless of its value.
   ///
   /// Callers should additionally gate on the command-response STATUS byte; a
   /// non-success reply leaves the body unpopulated (see [parseCommandResponse]).
@@ -503,11 +503,12 @@ HelloInfo parseHello(Uint8List payload) {
   // a percentage is 0..100 by definition, so 1000 is the ceiling. Out of
   // range = not the battery field, keep scanning / leave batteryPct null.
   //
-  // The scan starts at payload[2] — the first byte of the response BODY.
-  // payload[0] is the echoed request seq and payload[1] the status, and a
-  // status of 1 next to a small body byte reads as a perfectly plausible
-  // 0.1–76.9%, so starting at 1 reported the status byte as a battery level.
-  for (int off = 2; off < 10; off++) {
+  // The scan starts at payload[3]. payload[0] is the echoed request seq,
+  // payload[1] the status, and payload[2] a fixed body byte (0x04) that sits
+  // right before the battery u32 at [3]. Starting at 2 read 0x04 | lo << 8,
+  // which for a battery low byte of 1..3 lands in range (26.0/51.6/77.2%) and
+  // stopped the scan before the real field.
+  for (int off = 3; off < 10; off++) {
     if (off + 2 <= payload.length) {
       final v = u16(payload, off);
       if (v >= 10 && v <= 1000) {
@@ -1490,12 +1491,19 @@ Decoded _decodeDataRecord(Uint8List inner,
         'data_record', {'rec_type': inner.length > 1 ? inner[1] : -1});
   }
   final recType = inner.length > 1 ? inner[1] : -1;
+  // A gen4 historical (0x2F) record is never a live HR packet: inner[1] is its
+  // layout version, not a record type, and inner[8] sits inside its own u32
+  // timestamp at [7:11]. Same rule as live.dart — a 0x2F frame is R10 only at
+  // R10 size, and never goes through the small-packet realtime heuristics.
+  final historical = inner.isNotEmpty && inner[0] == PacketType.historicalData;
   // Live R10 (HR + IMU) — surface HR for the live display. Checked before the
   // generic small-packet branch below: a short/lite R10 record (parseR10Lite
   // only requires 18 bytes) is still under that branch's 64-byte cutoff and
   // would otherwise be swallowed there first, misread by the wrong offsets,
   // and never reach this branch at all.
-  if (recType == Record.r10) {
+  if (recType == Record.r10 &&
+      (inner[0] == PacketType.realtimeRawData ||
+          inner.length >= kR10MinLength)) {
     final r = parseR10Lite(inner);
     if (r != null) {
       // rr_ms too: parseR10Lite already accepted these beats, and the short
@@ -1517,7 +1525,7 @@ Decoded _decodeDataRecord(Uint8List inner,
     }
   }
   // Compact realtime stream (small packet).
-  if (inner.length < 64) {
+  if (inner.length < 64 && !historical) {
     if (recType == 2) {
       final v2 = parseRealtimeHrV2(inner);
       // rev 2 is every real 0x28 packet, and it keeps the compact layout's

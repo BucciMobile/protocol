@@ -3,8 +3,7 @@
 // The v18 and v26 fixtures below are REAL captures, independently
 // byte-verified (CRC16-modbus header + CRC32 payload both check out; every
 // decoded field cross-checked by hand against the multiband port spec's §1.5
-// claims, which themselves come from two independent hardware-tested
-// reference implementations). The v20/v21 cases are synthetic — no full real
+// claims). The v20/v21 cases are synthetic — no full real
 // capture was available for this task — but exercise the exact
 // byte-verified offsets/scales from §1.5, so they validate the arithmetic
 // even without a real fixture.
@@ -148,7 +147,7 @@ void main() {
     });
 
     test('experimental fields exposed raw, not fabricated', () {
-      // frame-abs 40: still unnamed, and the whoop-rs `>=192` gate passes
+      // frame-abs 40: still unnamed, and a `>=192` gate passes
       // 96.7% of records, so no anomaly gate is wired off it. 255 is the
       // modal value.
       expect(sample.cardiacStatusRaw, 255);
@@ -173,7 +172,7 @@ void main() {
     // acceleration runs 0.0773 / 0.0255 / 0.0104 / 0.0504 g and median heart
     // rate 88 / 76 / 60 / 77 bpm across nibbles 0..3, so nibble 0 is the
     // highest-motion, highest-HR state (it cannot be "still") and nibble 2 is
-    // the lowest of both. whoop-rs's "0 still / 1 wake" is reversed.
+    // the lowest of both. "0 still / 1 wake" is reversed.
     final frame = hex(
       'aa01740001003fb12f1280733d8401b69f266a66460066025a0265020000000'
       '000007b0a8d656463ff0012163cf6a439bf2924fd3ed763fe3e3200aa000000'
@@ -601,10 +600,10 @@ void main() {
       expect(parseGen5Historical(inner), isNull);
     });
 
-    test('channel slot start offsets match both reference repos exactly', () {
-      // whoop-rs's inner-relative offsets (39,239,1305,1505,1727,1927) — see
+    test('channel slot start offsets match the frame layout exactly', () {
+      // inner-relative offsets (39,239,1305,1505,1727,1927) — see
       // gen5_records.dart's derivation from the frame-absolute offsets
-      // (47,247,1313,1513,1735,1935) noop states directly.
+      // (47,247,1313,1513,1735,1935).
       const bodyStart = 18, blockLen = 422;
       int ch0(int b) => bodyStart + b * blockLen + 21;
       int ch1(int b) => ch0(b) + 200;
@@ -800,8 +799,8 @@ void main() {
     });
 
     test('a non-1 hello revision still parses at the fixed offsets', () {
-      // The revision byte is recorded, not a gate — the official parser reads
-      // the fixed offsets regardless of its value.
+      // The revision byte is recorded, not a gate — the fixed offsets are
+      // read regardless of its value.
       final body = gen5HelloBody();
       body[0] = 2; // some future revision
       final h = Gen5HelloInfo.parse(body)!;

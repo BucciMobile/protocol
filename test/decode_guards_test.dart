@@ -82,6 +82,19 @@ void main() {
       expect(r.rrIntervalsMs, isEmpty);
     });
 
+    test('a v24 count of 5..8 is rejected — the record has only 4 slots', () {
+      // Slots are 19/21/23/25; [27:29] is another field and ppg_green is @29.
+      // Count 5 used to read [27:29] = 800 ms as a fifth "beat".
+      for (final n in [5, 6, 7, 8]) {
+        final r = parseR24(hexToBytes(_patched(_goodV24, {
+          18: n,
+          for (int i = 0; i < 5; i++) ...{19 + 2 * i: 0x20, 20 + 2 * i: 0x03},
+        })))!;
+        expect(r.rrIntervalsMs, isEmpty, reason: 'count $n');
+        expect(r.rrCount, 0, reason: 'count $n');
+      }
+    });
+
     test('the count guard applies on the TRUSTED v24/v12 path too', () {
       // v24 and v12 skip the physiological-plausibility gate entirely, so the
       // R-R guard has to be independent of it.
@@ -417,6 +430,22 @@ void main() {
       final payload =
           Uint8List.fromList([0x00, 0xed, 0x03, ...List<int>.filled(9, 0xff)]);
       expect(parseHello(payload).batteryPct, isNull);
+    });
+
+    test('parseHello does not read body[0] into the battery', () {
+      // payload[2] is 0x04 on every real body; with a battery low byte of 1..3
+      // u16@2 = 0x0104/0x0204/0x0304 used to win the scan as 26.0/51.6/77.2%.
+      const body =
+          'a001048303000000b196e201b0020000344332323438303932003865323738326237'
+          '346634303238346333663437363138623062613234373663356431366363303533'
+          '313862373532316431353635650600000002000000100000002900000011000000';
+      for (final e in {0x0201: 51.3, 0x0302: 77.0, 0x0101: 25.7}.entries) {
+        final b = hexToBytes(body);
+        b[3] = e.key & 0xff;
+        b[4] = e.key >> 8;
+        expect(parseHello(b).batteryPct, closeTo(e.value, 1e-9),
+            reason: '0x${e.key.toRadixString(16)}');
+      }
     });
 
     test('parseHello still reads a real battery field', () {
