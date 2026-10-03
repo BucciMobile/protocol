@@ -1,7 +1,6 @@
 // Labrador R17 (WHOOP MG filtered ECG) parser — bounds, identity, signs,
-// flags and preserved bytes. Fixtures are SYNTHETIC: the layout is the
-// source-proven official parser map (docs/mg/02 §"Revision-17 packet body"),
-// never a private capture.
+// flags and preserved bytes. Fixtures are SYNTHETIC, built from the R17
+// layout in lib/src/labrador.dart.
 
 import 'dart:typed_data';
 

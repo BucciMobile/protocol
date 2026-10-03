@@ -1,6 +1,5 @@
-// Gen5HelloInfo.isMaverick — the WHOOP MG identity gate. Official 5.458.0
-// maps optical revision [0,38) to app generation MAVERICK and [48,86) to
-// GOOSE (ordinary WHOOP 5.0); the physical MG returns 0, the retained
+// Gen5HelloInfo.isMaverick — the WHOOP MG identity gate. Optical revision
+// [0,38) is MAVERICK (WHOOP MG) and [48,86) is GOOSE (ordinary WHOOP 5.0); the physical MG returns 0, the retained
 // ordinary 5.0 returns 82. Only a revision-1 HELLO may be read this way.
 
 import 'dart:typed_data';
