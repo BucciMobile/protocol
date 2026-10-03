@@ -92,15 +92,28 @@ void main() {
     test('time response carries the Garmin-epoch timestamp and UTC offset',
         () {
       final nowUnix = 1735689600; // 2025-01-01T00:00:00Z
-      final frame = garminBuildTimeResponse(
-          nowUnixSeconds: nowUnix, utcOffsetSeconds: 3600);
+      final request = garminParseGfdiFrame(garminBuildGfdiFrame(
+          kGarminMsgCurrentTimeRequest, [0x2a, 0x01, 0x00, 0x00]))!;
+      final frame = garminBuildTimeResponse(request,
+          nowUnixSeconds: nowUnix, utcOffsetSeconds: 3600)!;
       final parsed = garminParseGfdiFrame(frame)!;
       expect(parsed.type, kGarminMsgResponse);
       final view = ByteData.sublistView(parsed.payload);
       expect(view.getUint16(0, Endian.little), kGarminMsgCurrentTimeRequest);
+      expect(view.getUint32(3, Endian.little), 0x012a,
+          reason: 'reference_id must echo the request');
       expect(view.getUint32(7, Endian.little),
           nowUnix - kGarminEpochOffset);
       expect(view.getInt32(11, Endian.little), 3600);
+    });
+
+    test('time response abstains without a request id to echo', () {
+      final short = garminParseGfdiFrame(
+          garminBuildGfdiFrame(kGarminMsgCurrentTimeRequest, [1, 2]))!;
+      expect(
+          garminBuildTimeResponse(short,
+              nowUnixSeconds: 1735689600, utcOffsetSeconds: 0),
+          isNull);
     });
   });
 
