@@ -303,7 +303,7 @@ void main() {
   });
 
   group('OpcodeSafety', () {
-    test('classifies the whoop-rs forbidden/destructive lists', () {
+    test('classifies the forbidden/destructive lists', () {
       expect(OpcodeSafety.isForbidden(Cmd.setClockMaverick), isTrue); // 146
       expect(OpcodeSafety.isForbidden(Cmd.forceTrim), isTrue); // 25
       expect(OpcodeSafety.isDestructive(Cmd.forceTrim), isTrue);

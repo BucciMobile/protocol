@@ -608,11 +608,9 @@ class FirmwareAwareR24Decoder {
 // SUPERSEDED (2026-08, multiband port): this file used to also own a
 // `parseGen5Record` targeting `_gen5NormalHistoryVersions = {9, 12, 24}`.
 // That version set is WRONG — 9/12/24 are WHOOP4's thin/rich HR-only and
-// full-optical layouts, not anything a real WHOOP 5.0/MG strap ships. Both
-// independent reference implementations (whoop-rs, hardware-tested; noop,
-// tens of thousands of captured records across multiple straps/firmware
-// builds) agree that real gen5 historical data (packet type 0x2F) ships
-// hist_version bytes 18, 20, 21, 26 — never 9/12/24. Running gen5 bytes
+// full-optical layouts, not anything a real WHOOP 5.0/MG strap ships. Real
+// gen5 historical data (packet type 0x2F) ships hist_version bytes 18, 20,
+// 21, 26 — never 9/12/24, across multiple straps and firmware builds. Running gen5 bytes
 // through this file's v24 field map (which is what the old `parseGen5Record`
 // effectively did, gated down to just the HR byte) reads all-zero garbage on
 // real captures — exactly the symptom this file's old doc comment described,
