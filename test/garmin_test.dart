@@ -130,9 +130,25 @@ void main() {
       expect(decoded.payload, [1, 2, 3], reason: 'routing byte 0 must be stripped');
     });
 
-    test('a non-flagged, non-zero first byte is rejected, not a data frame',
-        () {
-      expect(garminDecodeMlr(const [0x03, 0x01, 0x02]), isNull);
+    test('a bare non-zero handle byte is a data frame on that handle', () {
+      final decoded = garminDecodeMlr(const [0x01, 0x00, 0x05, 0x01]);
+      expect(decoded, isA<GarminMlrData>());
+      expect((decoded as GarminMlrData).handle, 1);
+      expect(decoded.payload, [0x00, 0x05, 0x01]);
+      // above the 3-bit flagged range too
+      expect((garminDecodeMlr(const [0x0c, 0x01]) as GarminMlrData).handle,
+          0x0c);
+      expect(garminDecodeMlr(const [0x03]), isNull);
+    });
+
+    test('close-all puts the client id right after the type', () {
+      final v = ByteData.sublistView(garminCloseAllRequest());
+      expect(v.getUint8(0), 0x05);
+      expect(v.getInt64(1, Endian.little), 2);
+      expect(v.getUint16(9, Endian.little), 0);
+      // same offset as register-ml
+      expect(ByteData.sublistView(garminRegisterMlRequest(kGarminServiceGfdi))
+          .getInt64(1, Endian.little), 2);
     });
 
     test('CLOSE_ALL_RESP decodes to the close-all ack', () {
