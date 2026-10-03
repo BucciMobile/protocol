@@ -799,8 +799,8 @@ void main() {
     });
 
     test('a non-1 hello revision still parses at the fixed offsets', () {
-      // The revision byte is recorded, not a gate — the official parser reads
-      // the fixed offsets regardless of its value.
+      // The revision byte is recorded, not a gate — the fixed offsets are
+      // read regardless of its value.
       final body = gen5HelloBody();
       body[0] = 2; // some future revision
       final h = Gen5HelloInfo.parse(body)!;

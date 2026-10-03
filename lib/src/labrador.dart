@@ -1,14 +1,12 @@
 // labrador.dart — WHOOP MG Labrador records: the filtered ECG (revision 17)
 // and the raw ECG (revision 16).
 //
-// Evidence: official Android 5.458.0 Labrador parser + exact 50.41.1.0
-// firmware constructor, physically closed on a WHOOP MG
-// (reversing-whoop docs/mg/02, docs/mg/05). Every field below is the
-// source-proven use; bytes past the sample block are preserved but NOT named.
+// Layout checked on a WHOOP MG (firmware 50.41.1.0). Only fields with a known
+// meaning are named; bytes past the sample block are preserved but NOT named.
 //
 // Deliberately NOT part of the gen5 historical decoder family
 // (gen5_records.dart): R17 arrives LIVE as packet type 43 (REALTIME_RAW_DATA)
-// on the official foreground path, which that type-47-only dispatch never
+// during a foreground ECG reading, which that type-47-only dispatch never
 // sees; and the family's base `flags` (inner[2]) / `ppgSampleRateHz` would
 // name a byte this record gives no meaning to. R17 has its own flags byte at
 // inner[14].
@@ -31,9 +29,9 @@ class LabradorFlags {
   /// bit 0 — entering S2 state 1.
   bool get enteringS2One => (raw & 0x01) != 0;
 
-  /// bit 1 — current S2 state is 1. The official reducer appends ordinary
-  /// active frames only while this is set; a valid active frame with it clear
-  /// is the distinct explicit-RESTART branch.
+  /// bit 1 — current S2 state is 1. Ordinary active frames belong to the
+  /// reading only while this is set; a valid active frame with it clear
+  /// means the reading restarted.
   bool get currentS2One => (raw & 0x02) != 0;
 
   /// bit 2 — S2 transition 1 -> 2 (physically `0x0c` on the terminal frame).
@@ -90,13 +88,13 @@ class LabradorR17 {
   /// `0xffff` at inner[21..22] means the variability value is unavailable.
   static const int variabilityUnavailable = 0xffff;
 
-  /// inner[0]: 43 (REALTIME_RAW_DATA, the official live path) or 47
-  /// (HISTORICAL_DATA — a stored R17, which the official foreground flow never
-  /// enables; see [parse]'s `allowStored`).
+  /// inner[0]: 43 (REALTIME_RAW_DATA, the live path) or 47
+  /// (HISTORICAL_DATA — a stored R17, which a foreground reading never
+  /// produces; see [parse]'s `allowStored`).
   final int packetType;
 
-  /// inner[2] — a generic packet-context marker the official R17 consumer
-  /// ignores (`0x80` on the first all-zero boundary packet). Kept raw.
+  /// inner[2] — a generic packet-context marker with no R17-specific meaning
+  /// (`0x80` on the first all-zero boundary packet). Kept raw.
   final int headerSecondary;
 
   final int sequence; // inner[3..6] u32 LE data-cycle sequence
@@ -112,8 +110,9 @@ class LabradorR17 {
   final int liveHr; // inner[20] current HR — live category input
 
   /// inner[21..22] u16 LE, or null when the wire value is [variabilityUnavailable].
-  /// Twice the RMS successive difference over 30 callback values (firmware);
-  /// the callback unit is unresolved, so no physiological unit is exposed.
+  /// Twice the RMS successive difference over 30 callback values, computed on
+  /// the strap; the callback unit is unresolved, so no physiological unit is
+  /// exposed.
   final int? variabilityRaw;
   final int reserved; // inner[23]
   final int sampleCount; // inner[24..25] u16 LE, <= [maxSamples]
@@ -149,10 +148,10 @@ class LabradorR17 {
 
   bool get presence => flags.presence;
 
-  /// The official app's completion condition.
+  /// The reading is complete.
   bool get isTerminal => progress == 100 || s2State == 2;
 
-  /// The official app's invalid/abort sentinel.
+  /// The reading was invalid or aborted.
   bool get isInvalid => progress == 255;
 
   bool get isLive => packetType == PacketType.realtimeRawData;

@@ -215,18 +215,21 @@ double _round(double v, int decimals) {
   return _jsRound(v * p) / p;
 }
 
-/// Largest R-R interval count a single 1 s historical record can plausibly
-/// declare. A larger count byte means we are reading the wrong offset — not a
-/// second containing dozens of heartbeats. A record declaring more than this
-/// yields NO intervals at all (absence), never a truncated read of whatever
-/// bytes happen to follow (ppg, accel float32s, spo2, the optical block,
-/// ambient).
+/// Largest R-R interval count an R10 record can plausibly declare. A larger
+/// count byte means we are reading the wrong offset — not a second containing
+/// dozens of heartbeats. A record declaring more than this yields NO intervals
+/// at all (absence), never a truncated read of whatever bytes happen to follow.
 ///
-/// This is the HISTORICAL-record ceiling only. live.dart's `realtimeRr` uses
-/// it for the R10 form, which declares its count inside a 1920-byte record,
-/// but a 0x28 realtime packet is 20 bytes with exactly four R-R slots, so that
-/// branch caps at 4 instead — see `realtimeRr`.
+/// This is the R10 ceiling only (live.dart's `realtimeRr`, control.dart's
+/// `_r10Rr`): R10 declares its count inside a 1920-byte record. A 0x28
+/// realtime packet and a v24/v12 historical record each have exactly four R-R
+/// slots, so those cap at 4 instead — see `realtimeRr` and [_kV24RrSlots].
 const int kMaxRrPerRecord = 8;
+
+/// R-R slots in a v24/v12 historical record: i16 LE at 19/21/23/25. inner[27]
+/// is a different field and ppg_green sits at 29, so a count of 5..8 would
+/// read those as beats.
+const int _kV24RrSlots = 4;
 
 /// Physiologically possible beat-to-beat interval bounds, ms — 2500 ms = 24 bpm,
 /// 200 ms = 300 bpm. Identical to the bound control.dart's `parseRealtimeHr`
@@ -440,7 +443,7 @@ R24? _parseV24Layout(
   // actually evidences; beats are not, so they are absent rather than invented.
   final declaredRrCount = validate ? 0 : inner[18];
   final rrIntervalsMs = <int>[];
-  if (declaredRrCount <= kMaxRrPerRecord) {
+  if (declaredRrCount <= _kV24RrSlots) {
     for (int i = 0; i < declaredRrCount && 19 + 2 * i + 2 <= inner.length; i++) {
       final v = view.getInt16(19 + 2 * i, Endian.little);
       if (v >= kMinRrMs && v <= kMaxRrMs) rrIntervalsMs.add(v);

@@ -14,9 +14,10 @@
 // determinism, regression and physiological sanity. It does not prove
 // correctness, because there is no independent oracle for this band — nobody
 // on this project owns a ring. The decoders that are NOT here (beat intervals,
-// SpO2, hypnogram, steps) are absent precisely because there are no bytes to
+// SpO2, steps, raw PPG) are absent precisely because there are no bytes to
 // build such a fixture from, and shipping a guess would have this file
-// faithfully encoding the wrong answer.
+// faithfully encoding the wrong answer. The hypnogram vectors below are
+// synthetic: they pin bit order and refusal, not real-ring correctness.
 //
 // The NULL cases at the bottom are the load-bearing half: they are what proves
 // the decoder REFUSES rather than always producing something.
@@ -272,6 +273,55 @@ void main() {
       // not just that the common (high-word-zero) case happens to work.
       expect(ouraCmdSyncTime(0x100000001).sublist(2, 10),
           _hex('0100000001000000'));
+    });
+  });
+
+  group('sleep phases', () {
+    OuraEvent hypnogram(int tag, String bodyHex) {
+      final body = _hex(bodyHex);
+      return parseOuraEvent(parseOuraFrame(
+          [tag, body.length + 4, ..._hex('a34d8f00'), ...body])!)!;
+    }
+
+    test('two-bit codes unpack MSB-first, four to a byte', () {
+      // 0b00_01_10_11: LSB-first would hand back the reverse.
+      final out = decodeSleepPhases(hypnogram(0x4b, '001b'))!;
+      expect(out.header, 0x00);
+      expect(out.phases, [
+        OuraSleepPhase.deep,
+        OuraSleepPhase.light,
+        OuraSleepPhase.rem,
+        OuraSleepPhase.awake,
+      ]);
+    });
+
+    test('all three carrier tags decode the same codes', () {
+      for (final tag in <int>[0x4b, 0x4e, 0x5a]) {
+        final out = decodeSleepPhases(hypnogram(tag, '01e4'))!;
+        expect(out.phases, [
+          OuraSleepPhase.awake,
+          OuraSleepPhase.rem,
+          OuraSleepPhase.light,
+          OuraSleepPhase.deep,
+        ]);
+      }
+    });
+
+    test('the header is passed through, every following byte is codes', () {
+      final out = decodeSleepPhases(hypnogram(0x5a, '0301020300'))!;
+      expect(out.header, 0x03);
+      expect(out.phases.length, 16);
+      expect(out.phases[3], OuraSleepPhase.light);
+      expect(out.phases[7], OuraSleepPhase.rem);
+      expect(out.phases[11], OuraSleepPhase.awake);
+    });
+
+    test('a header-only body is null', () {
+      expect(decodeSleepPhases(hypnogram(0x4b, '00')), isNull);
+    });
+
+    test('a non-hypnogram tag is null', () {
+      expect(decodeSleepPhases(hypnogram(0x61, '001b')), isNull);
     });
   });
 
