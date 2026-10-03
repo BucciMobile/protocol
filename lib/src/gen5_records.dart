@@ -11,8 +11,7 @@
 // = {9, 12, 24}`, which targeted the WRONG version set (those are WHOOP4's
 // thin/rich HR-only and full-optical layouts, not anything gen5 ships). Real
 // WHOOP 5.0/MG historical data (packet type 0x2F) ships hist_version bytes
-// 18, 20, 21, 26 — the VERSION SET is confirmed independently by whoop-rs
-// (Rust, hardware-tested) and noop (Swift, multiple straps/firmware builds),
+// 18, 20, 21, 26 (confirmed across multiple straps and firmware builds),
 // and v18/v21/v26's FIELD LAYOUTS are independently re-verified byte-by-byte
 // here against real fixtures (CRC16 + CRC32 both checked) — see
 // gen5_historical_test.dart for the golden parity tests. v26's trailing
@@ -185,10 +184,9 @@ enum Gen5SleepState {
 }
 
 /// Decoded gen5 v18 historical record. Field confidence/status is annotated
-/// per-field below — several fields have OPEN semantic disagreements between
-/// the two reference implementations (whoop-rs vs noop) that could not be
-/// resolved from bytes alone; those are called out explicitly rather than
-/// silently picking a side.
+/// per-field below — several fields have OPEN semantic questions that could
+/// not be resolved from bytes alone; those are called out explicitly rather
+/// than silently picking a meaning.
 class Gen5HistorySample extends Gen5HistoricalRecord {
   /// bpm. 0 is the band's own "no reading this second" (warming up / off skin),
   /// and it is also what we emit when the HR byte lands outside 25..230 — an
@@ -202,8 +200,8 @@ class Gen5HistorySample extends Gen5HistoricalRecord {
   final int rrCount;
   final List<int> rrIntervalsMs;
 
-  /// Raw @ inner[25] (frame-abs 33). whoop-rs calls this offset
-  /// "signal_flags"; the meaning is otherwise unconfirmed. Exposed raw.
+  /// Raw @ inner[25] (frame-abs 33). Possibly signal flags; the meaning is
+  /// unconfirmed. Exposed raw.
   final int cardiacFlags;
 
   /// @ inner[28] (frame-abs 36) — a flags-plus-counter byte.
@@ -246,9 +244,8 @@ class Gen5HistorySample extends Gen5HistoricalRecord {
   /// consume as a decoded value yet.
   final int rrPacked;
 
-  /// @ inner[32] (frame-abs 40). Meaning still unpinned. whoop-rs calls it
-  /// "signal_quality" and gates an HR-anomaly check on `>=192` — that gate
-  /// passes 96.7% of records and its rejections don't track [sleepState]
+  /// @ inner[32] (frame-abs 40). Meaning still unpinned. It looks like a
+  /// signal-quality byte, but an HR-anomaly gate on `>=192` passes 96.7% of records and its rejections don't track [sleepState]
   /// consistently between bands, so it is not doing what it looks like.
   ///
   /// Exposed raw ONLY. Do NOT wire an HR-anomaly gate off this byte.
@@ -271,8 +268,7 @@ class Gen5HistorySample extends Gen5HistoricalRecord {
   final List<double> gravityG;
 
   /// Cumulative on-chip step counter @ inner[49:51] u16 LE (frame-abs 57).
-  /// FULL 2 bytes — an earlier bug (fixed upstream, noop #132/#276) read
-  /// only the low byte. No midnight reset.
+  /// FULL 2 bytes — reading only the low byte is a known bug. No midnight reset.
   ///
   /// Passive behaviour supports a counter, but the NAME is not established:
   /// the byte pair is near-monotonically non-decreasing across long runs of
@@ -341,7 +337,7 @@ class Gen5HistorySample extends Gen5HistoricalRecord {
   double? get skinTempCOrNull => skinTempAvailable ? skinTempC : null;
 
   /// The three packed per-channel AGC/state words @ inner[67/69/71] u16 LE
-  /// (frame-abs 75/77/79). NOT deep-sleep markers (the noop reading).
+  /// (frame-abs 75/77/79). NOT deep-sleep markers.
   /// Bit layout:
   ///   bits 0-1   channel index      bits 2-3   zero
   ///   bits 4-7   PD-A/PD-B AGC offset-current indices
@@ -367,8 +363,8 @@ class Gen5HistorySample extends Gen5HistoricalRecord {
   ///   bits 2-3: **passive strap-fit classifier state** (the feature behind
   ///     `enable_passive_strap_fit_gen5`) — not a "wake quality".
   ///   bits 4-5: sleep_state — 0 wake / 1 still / 2 sleep / 3 up. Prefer
-  ///     [sleepState] over reading the nibble yourself. whoop-rs's
-  ///     "0 still / 1 wake" is the wrong way round.
+  ///     [sleepState] over reading the nibble yourself. "0 still / 1 wake"
+  ///     is the wrong way round.
   ///   bits 6-7: documented as the **high slot, zero**. Exposed raw so a
   ///     nonzero value is visible if firmware ever uses it — see [bits67Raw].
   final int sleepStateByte;
@@ -839,8 +835,7 @@ const int _kV20NumBlocks = 5;
 /// The exact inner length of a v20 buffer: total on-wire frame is 2140 bytes
 /// (8-byte header + padded-inner + 4-byte CRC32) per the reference fixture,
 /// so padded-inner = 2140 - 8 - 4 = 2128. Used as v20's PRIMARY identity
-/// check — length-gated before the version byte is even trusted, mirroring
-/// both reference repos' defensive pattern (§1.5).
+/// check — length-gated before the version byte is even trusted (§1.5).
 const int kGen5V20InnerLen =
     _kV20BodyStart + _kV20NumBlocks * _kV20BlockLen; // 2128
 
@@ -916,8 +911,7 @@ class Gen5V20Decoder implements Gen5RecordDecoder {
 
 // ── v21 — 100Hz 6-axis raw IMU buffer (R22 opt-in only). ───────────────────
 
-/// Decoded gen5 v21 IMU buffer. High-confidence layout — exact 3-way
-/// agreement between whoop-rs, noop, and this file's own byte-level
+/// Decoded gen5 v21 IMU buffer. High-confidence layout — byte-level
 /// verification (§1.5). The 100 Hz sample rate is confirmed: the band
 /// configures both blocks at 100 Hz, so a full block is one second of motion.
 class Gen5ImuBuffer extends Gen5HistoricalRecord {
@@ -977,8 +971,7 @@ const int _kV21SamplesPerAxis = 100;
 /// Exact inner length: total on-wire frame is 1244 bytes, so padded-inner =
 /// 1244 - 8 - 4 = 1232. PRIMARY identity check, along with [Gen5V21Decoder]'s
 /// bounded-count gate — neither the length nor the counts depend on trusting
-/// `hist_version` at all, matching how both reference repos actually
-/// identify this buffer.
+/// `hist_version` at all.
 const int kGen5V21InnerLen = _kV21GxStart + 3 * 2 * _kV21SamplesPerAxis; // 1232
 
 /// True when [inner] carries a record-21 IMU buffer, whichever packet type it
@@ -1972,7 +1965,7 @@ class Gen5V22Decoder implements Gen5RecordDecoder {
 //
 // Each decoder does its own cheap pre-check (`matches`) BEFORE trusting
 // `hist_version` — v21 in particular is identified purely by shape (paired
-// sample counts), matching how both reference repos actually recognise it.
+// sample counts).
 // Adding a future band's record kind means writing one more of these and
 // registering it in [kGen5HistoricalDecoders]; nothing here needs to branch
 // on a generation name.

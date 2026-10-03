@@ -301,8 +301,8 @@ Uint8List cmdBuzz(int seq,
 //
 // The alarm has THREE known on-wire forms:
 //   • a 7-byte SHORT form ([cmdSetAlarmSimple]) — time only, no haptic-mode;
-//   • a 9-byte REV-1 form ([cmdSetAlarmRev1]) — time + a haptic-mode u16.
-//     This is what the official WHOOP app sends (btsnoop capture); and
+//   • a 9-byte REV-1 form ([cmdSetAlarmRev1]) — time + a haptic-mode u16;
+//     and
 //   • a 20-byte RICH form ([cmdSetAlarm]) — time + slot + a haptic waveform.
 //
 // ⚠ Which form a WHOOP 4 EXECUTES is firmware-dependent (evidence: issue
@@ -317,16 +317,16 @@ Uint8List cmdBuzz(int seq,
 // byte-identical frames, so there is no separate short-form behaviour on
 // the wire.
 //
-// For a gen4 wake alarm, use [cmdSetAlarmRev1] — the official app's form,
-// not observed to fail on any firmware.
+// For a gen4 wake alarm, use [cmdSetAlarmRev1] — not observed to fail on
+// any firmware.
 //
 // gen5: SET_ALARM_TIME(66)/DISABLE_ALARM(69) are opcode-identical across
 // generations (§1.4), so [cmdSetAlarm]/[cmdSetAlarmSimple]/[cmdDisableAlarm]/
 // [cmdRunAlarm] now take an optional `profile` to build a gen5-framed
 // version of the SAME payload shape. That payload shape's gen4
-// hardware-verification does NOT transfer automatically — noop's own
-// comments mark this REVISION_4 body / DISABLE_ALARM's REVISION_2 body as
-// EXPERIMENTAL/hardware-unconfirmed-for-waking on gen5 specifically. Treat
+// hardware-verification does NOT transfer automatically — this REVISION_4
+// body and DISABLE_ALARM's REVISION_2 body are unconfirmed for waking on
+// gen5 specifically. Treat
 // gen5 alarm calls as feature-flagged/experimental until verified on real
 // Maverick/5.0 hardware — do not promise it wakes a gen5 strap.
 
@@ -391,15 +391,14 @@ Uint8List cmdSetAlarmSimple(int seq, DateTime when,
   return buildCommand(seq, Cmd.setAlarmTime, p, profile);
 }
 
-/// REV-1 alarm form (SET_ALARM_TIME = 0x42) — the official app's arm form
-/// (btsnoop-captured; the wire vector is pinned in the tests), verified to
-/// fire on fw 41.17.4.
+/// REV-1 alarm form (SET_ALARM_TIME = 0x42) — the wire vector is pinned in
+/// the tests; verified to fire on fw 41.17.4.
 ///
 /// Payload = 9 bytes:
 /// `[0x01][u32 epoch-seconds LE][u16 sub-seconds LE][u16 haptic-mode LE]`.
 ///   - `0x01` — the rev-1 form marker, as in [cmdSetAlarmSimple].
 ///   - epoch / sub-seconds — as everywhere else (1/32768-s units).
-///   - haptic-mode — buzz selector. The official app sends 0, the stock wake
+///   - haptic-mode — buzz selector. 0 is the stock wake
 ///     buzz (observed ~24 s, ended by HAPTICS_TERMINATED event 100). Non-zero
 ///     modes are accepted on the wire but unexplored — keep the default unless
 ///     you are experimenting.
@@ -679,7 +678,7 @@ Uint8List cmdGetClockGen5(int seq) =>
 Uint8List cmdBuzzGen5Maverick(int seq, {int overallLoop = 1}) {
   // Clamp rather than throw — a caller-supplied loop count (e.g. from a UI
   // slider) out of u8 range is a caller mistake, not a reason to crash the
-  // buzz command entirely. Matches the reference implementation's behavior.
+  // buzz command entirely.
   final clampedLoop =
       overallLoop < 0 ? 0 : (overallLoop > 0xff ? 0xff : overallLoop);
   final payload = <int>[
@@ -704,7 +703,7 @@ Uint8List cmdBuzzGen5Maverick(int seq, {int overallLoop = 1}) {
 //
 // Opcode-identical to gen4's SET_FF_VALUE, but gen5's R22 deep buffers
 // (v20 optical / v21 IMU / v26 PPG — see gen5_records.dart) are OFF by
-// default even in the official WHOOP app; a strap will only ever emit v18
+// default; a strap will only ever emit v18
 // unless this 16-flag sequence is sent first. Body shape: 65 bytes =
 // `[0x01 revision][name:32B NUL-padded ASCII][value:32B NUL-padded ASCII]`.
 // (An older note here described a 40-byte, revision-less body with the name at
@@ -760,7 +759,7 @@ Uint8List cmdSetDeviceConfigValueGen5(int seq, String name, String value) {
   return buildCommand(seq, Cmd.setDeviceConfigValue, payload, BandProfile.gen5);
 }
 
-// ⚠ THE OFFICIAL BOOLEAN WRITE VALUES, and nothing else:
+// ⚠ THE BOOLEAN WRITE VALUES, and nothing else:
 //     '1' — enable
 //     '2' — DISABLE
 // ASCII '0' is NOT a value the boolean writer ever emits: a key
@@ -819,7 +818,7 @@ const Set<String> kGen5R22ContestedFlagNames = {
 /// Build the R22 enable sequence (one SET_CONFIG per [kGen5R22EnableFlags],
 /// sequential `seq` starting at [startSeq]). This is a hard prerequisite for
 /// ever receiving v20 (optical)/v21 (IMU)/v26 (PPG) deep buffers from a real
-/// gen5 strap — the official WHOOP app never sends it, so a fresh connection
+/// gen5 strap — the flags are off by default, so a fresh connection
 /// without this sequence will only ever yield v18.
 ///
 /// PERSISTENT AND PARTLY IRREVERSIBLE. These are NVM writes that survive
