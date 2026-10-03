@@ -116,17 +116,21 @@ class GarminMlrControlOther extends GarminMlrPacket {
   const GarminMlrControlOther(this.type);
 }
 
-/// Route one raw notification. Null for input too short, or structurally not
-/// one of the two shapes this protocol documents (a flagged watch-to-host
-/// data frame, or a control frame with byte 0 clear) — everything else lands
-/// in one of the [GarminMlrPacket] arms above.
+/// Route one raw notification. Null only for input too short to be anything
+/// — everything else lands in one of the [GarminMlrPacket] arms above.
 GarminMlrPacket? garminDecodeMlr(List<int> data) {
   if (data.isEmpty) return null;
   if ((data[0] & _kMlrFlag) != 0) {
     final handle = (data[0] & _kMlrHandleMask) >> _kMlrHandleShift;
     return GarminMlrData(handle, Uint8List.fromList(data.sublist(1)));
   }
-  if (data[0] != 0) return null;
+  // Byte 0 clear and non-zero is the watch addressing a handle with a bare
+  // byte (how it answers a handle registered non-reliable, and the only form
+  // for handles above the 3-bit flagged range).
+  if (data[0] != 0) {
+    if (data.length < 2) return null;
+    return GarminMlrData(data[0], Uint8List.fromList(data.sublist(1)));
+  }
   if (data.length < 2) return null;
   final type = data[1];
   if (type == _kRespCloseAll) return const GarminCloseAllAck();
@@ -139,13 +143,14 @@ GarminMlrPacket? garminDecodeMlr(List<int> data) {
   return GarminMlrControlOther(type);
 }
 
-/// CLOSE_ALL_REQ payload: type(u8) + reserved(u16=0) + client id(i64) +
-/// reserved(u8=0). Wipes any handle a previous session left registered.
+/// CLOSE_ALL_REQ payload: type(u8) + client id(i64) + reserved(u16=0) +
+/// reserved(u8=0). Client id sits right after the type, as in
+/// REGISTER_ML_REQ. Wipes any handle a previous session left registered.
 Uint8List garminCloseAllRequest() {
   final b = ByteData(12)
     ..setUint8(0, _kReqCloseAll)
-    ..setUint16(1, 0, Endian.little)
-    ..setInt64(3, _kGarminClientId, Endian.little)
+    ..setInt64(1, _kGarminClientId, Endian.little)
+    ..setUint16(9, 0, Endian.little)
     ..setUint8(11, 0);
   return b.buffer.asUint8List();
 }

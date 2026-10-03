@@ -10,6 +10,7 @@ import 'band.dart';
 import 'constants.dart';
 import 'framing.dart';
 import 'gen5_records.dart';
+import 'live.dart' show kR10MinLength;
 import 'records.dart';
 
 // ── little-endian helpers over a byte list ──────────────────────────────────
@@ -1484,12 +1485,19 @@ Decoded _decodeDataRecord(Uint8List inner,
         'data_record', {'rec_type': inner.length > 1 ? inner[1] : -1});
   }
   final recType = inner.length > 1 ? inner[1] : -1;
+  // A gen4 historical (0x2F) record is never a live HR packet: inner[1] is its
+  // layout version, not a record type, and inner[8] sits inside its own u32
+  // timestamp at [7:11]. Same rule as live.dart — a 0x2F frame is R10 only at
+  // R10 size, and never goes through the small-packet realtime heuristics.
+  final historical = inner.isNotEmpty && inner[0] == PacketType.historicalData;
   // Live R10 (HR + IMU) — surface HR for the live display. Checked before the
   // generic small-packet branch below: a short/lite R10 record (parseR10Lite
   // only requires 18 bytes) is still under that branch's 64-byte cutoff and
   // would otherwise be swallowed there first, misread by the wrong offsets,
   // and never reach this branch at all.
-  if (recType == Record.r10) {
+  if (recType == Record.r10 &&
+      (inner[0] == PacketType.realtimeRawData ||
+          inner.length >= kR10MinLength)) {
     final r = parseR10Lite(inner);
     if (r != null) {
       // rr_ms too: parseR10Lite already accepted these beats, and the short
@@ -1511,7 +1519,7 @@ Decoded _decodeDataRecord(Uint8List inner,
     }
   }
   // Compact realtime stream (small packet).
-  if (inner.length < 64) {
+  if (inner.length < 64 && !historical) {
     if (recType == 2) {
       final v2 = parseRealtimeHrV2(inner);
       if (v2 != null) {
