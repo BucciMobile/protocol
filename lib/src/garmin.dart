@@ -116,17 +116,21 @@ class GarminMlrControlOther extends GarminMlrPacket {
   const GarminMlrControlOther(this.type);
 }
 
-/// Route one raw notification. Null for input too short, or structurally not
-/// one of the two shapes this protocol documents (a flagged watch-to-host
-/// data frame, or a control frame with byte 0 clear) — everything else lands
-/// in one of the [GarminMlrPacket] arms above.
+/// Route one raw notification. Null only for input too short to be anything
+/// — everything else lands in one of the [GarminMlrPacket] arms above.
 GarminMlrPacket? garminDecodeMlr(List<int> data) {
   if (data.isEmpty) return null;
   if ((data[0] & _kMlrFlag) != 0) {
     final handle = (data[0] & _kMlrHandleMask) >> _kMlrHandleShift;
     return GarminMlrData(handle, Uint8List.fromList(data.sublist(1)));
   }
-  if (data[0] != 0) return null;
+  // Byte 0 clear and non-zero is the watch addressing a handle with a bare
+  // byte (how it answers a handle registered non-reliable, and the only form
+  // for handles above the 3-bit flagged range).
+  if (data[0] != 0) {
+    if (data.length < 2) return null;
+    return GarminMlrData(data[0], Uint8List.fromList(data.sublist(1)));
+  }
   if (data.length < 2) return null;
   final type = data[1];
   if (type == _kRespCloseAll) return const GarminCloseAllAck();
@@ -139,13 +143,14 @@ GarminMlrPacket? garminDecodeMlr(List<int> data) {
   return GarminMlrControlOther(type);
 }
 
-/// CLOSE_ALL_REQ payload: type(u8) + reserved(u16=0) + client id(i64) +
-/// reserved(u8=0). Wipes any handle a previous session left registered.
+/// CLOSE_ALL_REQ payload: type(u8) + client id(i64) + reserved(u16=0) +
+/// reserved(u8=0). Client id sits right after the type, as in
+/// REGISTER_ML_REQ. Wipes any handle a previous session left registered.
 Uint8List garminCloseAllRequest() {
   final b = ByteData(12)
     ..setUint8(0, _kReqCloseAll)
-    ..setUint16(1, 0, Endian.little)
-    ..setInt64(3, _kGarminClientId, Endian.little)
+    ..setInt64(1, _kGarminClientId, Endian.little)
+    ..setUint16(9, 0, Endian.little)
     ..setUint8(11, 0);
   return b.buffer.asUint8List();
 }
@@ -360,19 +365,29 @@ GarminStatusAck? garminParseStatusAck(GarminGfdiFrame f) {
 /// from.
 const int kGarminEpochOffset = 631065600;
 
-/// Build the full answer to CURRENT_TIME_REQUEST (5052): a RESPONSE (5000)
-/// frame shaped as `ref_msg_type:u16(5052) | status:i8(0) | reference_id:u32(0)
-/// | garmin_timestamp:u32 | utc_offset_sec:i32 | dst_end:i32(0) |
-/// dst_start:i32(0)`. DST transitions are left at 0 — this pass states the
-/// current UTC offset and nothing about a future change to it.
-Uint8List garminBuildTimeResponse({
+/// Build the full answer to a CURRENT_TIME_REQUEST (5052) [request]: a
+/// RESPONSE (5000) frame shaped as `ref_msg_type:u16(5052) | status:i8(0) |
+/// reference_id:u32 | garmin_timestamp:u32 | utc_offset_sec:i32 |
+/// dst_end:i32(0) | dst_start:i32(0)`. `reference_id` echoes the request's
+/// own payload u32 so the watch can match the answer to what it asked. Null
+/// when [request] is not a 5052 frame carrying that id. DST transitions are
+/// left at 0 — this pass states the current UTC offset and nothing about a
+/// future change to it.
+Uint8List? garminBuildTimeResponse(
+  GarminGfdiFrame request, {
   required int nowUnixSeconds,
   required int utcOffsetSeconds,
 }) {
+  if (request.type != kGarminMsgCurrentTimeRequest ||
+      request.payload.length < 4) {
+    return null;
+  }
+  final referenceId =
+      ByteData.sublistView(request.payload).getUint32(0, Endian.little);
   final b = ByteData(23)
     ..setUint16(0, kGarminMsgCurrentTimeRequest, Endian.little)
     ..setInt8(2, 0)
-    ..setUint32(3, 0, Endian.little)
+    ..setUint32(3, referenceId, Endian.little)
     ..setUint32(7, nowUnixSeconds - kGarminEpochOffset, Endian.little)
     ..setInt32(11, utcOffsetSeconds, Endian.little)
     ..setInt32(15, 0, Endian.little)

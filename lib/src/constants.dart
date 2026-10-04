@@ -237,19 +237,19 @@ class Cmd {
   static const int setFfValue = 120;
 }
 
-/// Band-agnostic opcode safety classification, sourced from whoop-rs's
-/// hardware-tested command surface (kept SEPARATE from [dangerousCmds] above,
+/// Band-agnostic opcode safety classification (kept SEPARATE from
+/// [dangerousCmds] above,
 /// which is OpenStrap's own, independently-curated gen4 list — the two do not
 /// fully overlap, e.g. this list omits the device-update opcodes (0x24-0x26)
-/// that [dangerousCmds] already blocks, and adds a few whoop-rs flags ours
-/// didn't have, notably 120/SET_FF_VALUE — see the note on [forbidden] below).
+/// that [dangerousCmds] already blocks, and adds a few flags ours didn't
+/// have, notably 120/SET_FF_VALUE — see the note on [forbidden] below).
 ///
 /// This class only PUBLISHES the classification; it does not enforce
 /// anything itself — enforcement is a call-site concern (edge, at the point
 /// it issues a command write), per the multiband port plan's recommendation
 /// that the guard be "profile-data, not scattered logic".
 class OpcodeSafety {
-  /// Opcodes whoop-rs treats as never-safe-to-auto-fire. NOTE: 120
+  /// Opcodes that are never safe to auto-fire. NOTE: 120
   /// (SET_FF_VALUE / SET_CONFIG) is in this list, yet [commands.dart]'s R22
   /// enable-sequence deliberately sends opcode 120 sixteen times — that is
   /// an intentional, explicit, user-opted-in action (the R22 deep-buffer

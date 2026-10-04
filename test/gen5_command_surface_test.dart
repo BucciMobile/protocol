@@ -263,10 +263,9 @@ void main() {
       expect(_body(cmdSetAlarmRev1(1, half)).sublist(5, 7), [0x00, 0x40]);
     });
 
-    test('rev-1 pins the official app\'s wire capture (issue #32)', () {
-      // btsnoop of the official app arming a real WHOOP 4.0: epoch 1781912880
-      // (0x6A35D530), subsec 0, haptic-mode 0. The same shape fired on fw
-      // 41.17.4 (issue #32).
+    test('rev-1 pins the wire vector (issue #32)', () {
+      // A real WHOOP 4.0 arm: epoch 1781912880 (0x6A35D530), subsec 0,
+      // haptic-mode 0. This shape fired on fw 41.17.4 (issue #32).
       final capture = DateTime.fromMillisecondsSinceEpoch(1781912880 * 1000);
       expect(_body(cmdSetAlarmRev1(1, capture)),
           [0x01, 0x30, 0xD5, 0x35, 0x6A, 0x00, 0x00, 0x00, 0x00]);

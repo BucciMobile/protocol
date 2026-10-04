@@ -62,6 +62,32 @@ void main() {
     });
   });
 
+  group('decodeFrame never reads live HR out of a gen4 historical record', () {
+    Frame frame(Uint8List inner) => Frame(inner, true, true);
+
+    test('a short 0x2F record with version byte 10 is not R10', () {
+      final inner = _record(version: 10, length: 96, hr: 90);
+      final d = decodeFrame(frame(inner));
+      expect(d.kind, isNot('realtime_hr'));
+      expect(d.fields['hr'], isNull);
+    });
+
+    test('a truncated 0x2F record is not a compact realtime packet', () {
+      // inner[8] is a timestamp byte here, not a bpm
+      final d = decodeFrame(
+          frame(Uint8List.fromList(_record(version: 24).sublist(0, 40))));
+      expect(d.kind, isNot('realtime_hr'));
+      expect(d.fields['hr'], isNull);
+    });
+
+    test('a full-size archived R10 still decodes', () {
+      final inner = _record(version: 10, length: 1920, hr: 90);
+      final d = decodeFrame(frame(inner));
+      expect(d.kind, 'realtime_hr');
+      expect(d.fields['hr'], 90);
+    });
+  });
+
   group('R-R beats are read only where the field map is confirmed', () {
     test('v24 and v12 keep their beats', () {
       for (final version in [24, 12]) {
